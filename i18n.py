@@ -438,6 +438,7 @@ T = {
     "cons_head": ("Consensus title from this analysis", "ഈ വിശകലനത്തിൽ നിന്നുള്ള പൊതു ടൈറ്റിൽ", "इस विश्लेषण से सर्वसम्मत टाइटल"),
     "cons_why": ("Built from what the top videos agree on: the phrase \"{phrase}\" appears in {hits} of {n} titles, shared words: {extras}, winning format: {pat}. Your title is {ln} characters; the top videos have a median of {med}.", "മുൻനിര വീഡിയോകൾ യോജിക്കുന്ന കാര്യങ്ങളിൽ നിന്ന് ഉണ്ടാക്കിയത്: \"{phrase}\" എന്ന ശൈലി {n} ടൈറ്റിലുകളിൽ {hits} എണ്ണത്തിൽ ഉണ്ട്, പൊതു വാക്കുകൾ: {extras}, വിജയിക്കുന്ന ഫോർമാറ്റ്: {pat}. നിങ്ങളുടെ ടൈറ്റിൽ {ln} അക്ഷരം; മുൻനിര വീഡിയോകളുടെ മീഡിയൻ {med}.", "टॉप वीडियो जिन बातों पर सहमत हैं उनसे बना: \"{phrase}\" वाक्यांश {n} में से {hits} टाइटल में है, साझा शब्द: {extras}, जीतने वाला फ़ॉर्मेट: {pat}। आपका टाइटल {ln} अक्षर का है; टॉप वीडियो का मीडियन {med} है।"),
     "cons_note": ("Use it as a starting point and rewrite it in your own voice. Use the copy icon at the top right of the box.", "ഇത് ഒരു തുടക്കമായി എടുത്ത് സ്വന്തം ശൈലിയിൽ മാറ്റിയെഴുതൂ. ബോക്സിന്റെ വലത് മുകളിലെ കോപ്പി ഐക്കൺ ഉപയോഗിക്കൂ.", "इसे शुरुआत मानकर अपनी शैली में दोबारा लिखें। बॉक्स के ऊपर दाएँ कोने के कॉपी आइकन का उपयोग करें।"),
+    "no_vids": ("No videos found for: {k}. Try a wider \"Published in last\" setting or a broader keyword.", "ഇവയ്ക്ക് വീഡിയോകൾ കണ്ടെത്തിയില്ല: {k}. വിശാലമായ \"Published in last\" ക്രമീകരണമോ വിശാലമായ കീവേഡോ പരീക്ഷിക്കൂ.", "इनके लिए कोई वीडियो नहीं मिला: {k}। \"Published in last\" की अवधि बढ़ाएँ या व्यापक कीवर्ड आज़माएँ।"),
 }
 
 
