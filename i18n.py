@@ -384,6 +384,14 @@ T = {
     "tos": ("This service uses YouTube API Services. By using it you agree to the <a href=\"https://www.youtube.com/t/terms\" target=\"_blank\">YouTube Terms of Service</a> and the <a href=\"https://policies.google.com/privacy\" target=\"_blank\">Google Privacy Policy</a>.",
             "ഈ സേവനം YouTube API Services ഉപയോഗിക്കുന്നു. ഉപയോഗിക്കുന്നതിലൂടെ നിങ്ങൾ <a href=\"https://www.youtube.com/t/terms\" target=\"_blank\">YouTube സേവന നിബന്ധനകളും</a> <a href=\"https://policies.google.com/privacy\" target=\"_blank\">Google സ്വകാര്യതാ നയവും</a> അംഗീകരിക്കുന്നു.",
             "यह सेवा YouTube API Services का उपयोग करती है। इसका उपयोग करके आप <a href=\"https://www.youtube.com/t/terms\" target=\"_blank\">YouTube की सेवा शर्तों</a> और <a href=\"https://policies.google.com/privacy\" target=\"_blank\">Google की गोपनीयता नीति</a> से सहमत हैं।"),
+    "sec_titles_native": ("Suggested titles in your language", "മലയാളത്തിലുള്ള നിർദേശിച്ച ടൈറ്റിലുകൾ", "हिंदी में सुझाए गए टाइटल"),
+    "sec_titles_en": ("Suggested titles in English", "ഇംഗ്ലീഷിലുള്ള നിർദേശിച്ച ടൈറ്റിലുകൾ", "अंग्रेज़ी में सुझाए गए टाइटल"),
+    "tn_label": ("Topic name in your language (optional)", "നിങ്ങളുടെ ഭാഷയിലെ വിഷയത്തിന്റെ പേര് (ഓപ്ഷണൽ)", "आपकी भाषा में विषय का नाम (वैकल्पिक)"),
+    "tn_help": ("Type the topic in Malayalam or Hindi script, for example रिवर्स DCF. If blank, the keyword is used as typed.",
+                "വിഷയം മലയാളം ലിപിയിൽ ടൈപ്പ് ചെയ്യൂ. ഒഴിച്ചിട്ടാൽ കീവേഡ് നൽകിയത് പോലെ ഉപയോഗിക്കും.",
+                "विषय को हिंदी लिपि में लिखें, जैसे रिवर्स DCF। खाली छोड़ने पर कीवर्ड जैसा लिखा है वैसा ही इस्तेमाल होगा।"),
+    "tagstr_native": ("Suggested tags (your language first, then English)", "നിർദേശിച്ച ടാഗുകൾ (ആദ്യം നിങ്ങളുടെ ഭാഷ, പിന്നെ ഇംഗ്ലീഷ്)",
+                      "सुझाए गए टैग (पहले आपकी भाषा, फिर अंग्रेज़ी)"),
 }
 
 
