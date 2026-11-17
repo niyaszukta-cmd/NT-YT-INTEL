@@ -628,13 +628,111 @@ def render_checks(items: list):
     return round(sum(scored) / len(scored) * 100) if scored else 0
 
 
+
+# ============================================================================= buzz
+STOCKS = {
+    "Reliance Industries": ["reliance", "ril", "रिलायंस"], "HDFC Bank": ["hdfc bank", "hdfcbank", "एचडीएफसी"],
+    "ICICI Bank": ["icici bank", "icicibank", "icici"], "Infosys": ["infosys", "infy", "इंफोसिस"],
+    "TCS": ["tcs", "tata consultancy", "टीसीएस"], "ITC": ["itc"], "Larsen & Toubro": ["larsen", "l&t", "larsen & toubro"],
+    "Bharti Airtel": ["airtel", "bharti airtel"], "State Bank of India": ["sbi", "state bank of india", "एसबीआई"],
+    "Kotak Mahindra Bank": ["kotak bank", "kotak mahindra"], "Axis Bank": ["axis bank"],
+    "Hindustan Unilever": ["hindustan unilever", "hul"], "Bajaj Finance": ["bajaj finance"], "Bajaj Finserv": ["bajaj finserv"],
+    "Bajaj Auto": ["bajaj auto"], "Asian Paints": ["asian paints"], "Maruti Suzuki": ["maruti"], "Sun Pharma": ["sun pharma"],
+    "Titan": ["titan"], "UltraTech Cement": ["ultratech"], "Nestle India": ["nestle"], "Tata Motors": ["tata motors"],
+    "Tata Steel": ["tata steel"], "Tata Power": ["tata power"], "Tata Consumer": ["tata consumer"], "Tata Elxsi": ["tata elxsi"],
+    "Tata Technologies": ["tata technologies"], "Power Grid": ["power grid", "powergrid"], "NTPC": ["ntpc"], "ONGC": ["ongc"],
+    "Coal India": ["coal india"], "Wipro": ["wipro"], "HCL Tech": ["hcl tech", "hcltech", "hcl technologies"],
+    "Tech Mahindra": ["tech mahindra"], "Mahindra & Mahindra": ["m&m", "mahindra & mahindra"],
+    "Hero MotoCorp": ["hero motocorp"], "Eicher Motors": ["eicher", "royal enfield"], "TVS Motor": ["tvs motor"],
+    "Adani Enterprises": ["adani enterprises"], "Adani Ports": ["adani ports"], "Adani Power": ["adani power"],
+    "Adani Green": ["adani green"], "Adani Group": ["adani", "अदानी"], "Grasim": ["grasim"], "JSW Steel": ["jsw steel"],
+    "Hindalco": ["hindalco"], "Britannia": ["britannia"], "Cipla": ["cipla"], "Dr Reddys": ["dr reddy", "dr. reddy"],
+    "Divis Labs": ["divi's", "divis lab"], "Apollo Hospitals": ["apollo hospitals"], "Shriram Finance": ["shriram finance"],
+    "IndusInd Bank": ["indusind"], "SBI Life": ["sbi life"], "HDFC Life": ["hdfc life"], "BPCL": ["bpcl"], "Trent": ["trent"],
+    "Zomato (Eternal)": ["zomato", "eternal ltd"], "Swiggy": ["swiggy"], "Jio Financial": ["jio financial"],
+    "IndiGo (InterGlobe)": ["indigo", "interglobe"], "Bharat Electronics": ["bharat electronics"],
+    "HAL": ["hindustan aeronautics", "hal share"], "Vedanta": ["vedanta"], "Paytm": ["paytm", "one97"], "Nykaa": ["nykaa"],
+    "LIC": ["lic share", "lic ipo", "life insurance corporation"], "Yes Bank": ["yes bank"], "IRCTC": ["irctc"],
+    "IRFC": ["irfc"], "RVNL": ["rvnl"], "IREDA": ["ireda"], "Suzlon": ["suzlon"], "Vodafone Idea": ["vodafone idea"],
+    "Bank of Baroda": ["bank of baroda"], "Punjab National Bank": ["punjab national bank", "pnb"], "Canara Bank": ["canara bank"],
+    "IDFC First Bank": ["idfc first"], "Federal Bank": ["federal bank"], "Pidilite": ["pidilite"], "Havells": ["havells"],
+    "Siemens": ["siemens"], "DLF": ["dlf"], "Godrej Properties": ["godrej properties"], "Lodha": ["lodha", "macrotech"],
+    "Zydus": ["zydus"], "Lupin": ["lupin"], "Aurobindo Pharma": ["aurobindo"], "Biocon": ["biocon"],
+    "Persistent Systems": ["persistent systems"], "Coforge": ["coforge"], "LTIMindtree": ["ltimindtree"],
+    "Dixon Technologies": ["dixon"], "Polycab": ["polycab"], "Voltas": ["voltas"], "DMart (Avenue Supermarts)": ["dmart", "avenue supermarts"],
+    "Berger Paints": ["berger paints"], "Dabur": ["dabur"], "Marico": ["marico"], "Varun Beverages": ["varun beverages"],
+    "Ambuja Cement": ["ambuja"], "Shree Cement": ["shree cement"], "SRF": ["srf"], "UPL": ["upl"], "MRF": ["mrf"],
+    "Ashok Leyland": ["ashok leyland"], "Muthoot Finance": ["muthoot"], "Cholamandalam": ["cholamandalam", "chola finance"],
+    "Max Healthcare": ["max healthcare"], "Jindal Steel": ["jindal steel"], "SAIL": ["sail share", "steel authority"],
+    "NMDC": ["nmdc"], "Hindustan Zinc": ["hindustan zinc"], "GAIL": ["gail"], "Indian Oil": ["indian oil", "ioc"],
+    "Mazagon Dock": ["mazagon"], "Cochin Shipyard": ["cochin shipyard"], "Bharat Dynamics": ["bharat dynamics"],
+    "Ola Electric": ["ola electric"], "Waaree Energies": ["waaree"], "Hyundai Motor India": ["hyundai motor india"],
+    "Tesla": ["tesla"], "Nvidia": ["nvidia"], "Apple": ["apple stock", "aapl"], "Microsoft": ["microsoft"], "Amazon": ["amazon"],
+}
+TERMS = {
+    "Nifty 50": ["nifty 50", "nifty50", "nifty"], "Bank Nifty": ["bank nifty", "banknifty"], "Sensex": ["sensex"],
+    "FinNifty": ["finnifty", "fin nifty"], "Midcap and Smallcap": ["midcap", "smallcap", "small cap", "mid cap"],
+    "Gamma exposure (GEX)": ["gamma exposure", "gex", "gamma flip", "call wall", "put wall"],
+    "Options and option chain": ["options", "option chain", "option selling", "option buying"],
+    "Valuation (DCF, PE)": ["valuation", "dcf", "intrinsic value", "pe ratio", "fair value"],
+    "IPO": ["ipo", "gmp"], "Results and earnings": ["results", "earnings", "q1", "q2", "q3", "q4"],
+    "Dividend": ["dividend"], "Mutual funds and SIP": ["mutual fund", "sip"], "Gold": ["gold"], "Silver": ["silver"],
+    "Crypto": ["bitcoin", "crypto", "ethereum"], "Budget": ["budget"], "RBI and interest rates": ["rbi", "repo rate", "interest rate"],
+    "US Fed": ["fed ", "federal reserve", "fomc"], "Inflation": ["inflation"], "Market crash or rally": ["crash", "rally", "correction"],
+    "Personal finance": ["personal finance", "tax saving", "emergency fund", "insurance"],
+}
+
+
+def compile_defs(defs: dict) -> dict:
+    return {n: re.compile(r"(?<![\w])(?:" + "|".join(re.escape(a) for a in sorted(al, key=len, reverse=True)) + r")(?![\w])", re.I)
+            for n, al in defs.items()}
+
+
+STOCK_RX, TERM_RX = compile_defs(STOCKS), compile_defs(TERMS)
+
+
+def video_text(df: pd.DataFrame) -> pd.Series:
+    return (df["title"] + " " + df["tags"].apply(lambda ts: " ".join(ts))).str.lower()
+
+
+def entity_stats(df: pd.DataFrame, rx_map: dict) -> pd.DataFrame:
+    text = video_text(df)
+    rows = []
+    for name, rx in rx_map.items():
+        m = text.apply(lambda s_: bool(rx.search(s_)))
+        if m.any():
+            sub = df[m]
+            rows.append(dict(name=name, videos=len(sub), channels=int(sub["channel_id"].nunique()), total_views=int(sub["views"].sum()),
+                             median_vpd=int(sub["views_per_day"].median()), newest_h=int(sub["age_days"].min() * 24)))
+    out = pd.DataFrame(rows, columns=["name", "videos", "channels", "total_views", "median_vpd", "newest_h"])
+    return out.sort_values(["videos", "total_views"], ascending=False).reset_index(drop=True)
+
+
+def window_filter(df: pd.DataFrame, mode: str, day=None) -> pd.DataFrame:
+    if mode == "all":
+        return df
+    if mode == "day":
+        d_ = pd.to_datetime(df["published_at"], utc=True).dt.tz_convert(IST).dt.date
+        return df[d_ == day]
+    lim = {"d1": 1, "d2": 2, "d7": 7, "d30": 30}[mode]
+    return df[df["age_days"] <= lim]
+
+
+TOPIC_Q = {"stock_market": "stock market today", "finance": "finance", "economics": "economics", "personal_finance": "personal finance",
+           "mutual_funds": "mutual funds sip", "investing": "investing for beginners", "options": "options trading",
+           "ipo": "ipo", "crypto": "crypto bitcoin", "gold": "gold price", "banking": "bank loan interest rate",
+           "tax": "income tax", "insurance": "insurance", "realestate": "real estate"}
+CHART_CATS = ["27", "25", "22", "24", "28"]
+
+
 # ============================================================================= styling
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Malayalam:wght@400;700&family=Noto+Sans+Devanagari:wght@400;700&display=swap');
 :root{--teal:#1DD3A0;--amber:#FFB020;--red:#FF4D6A;--blue:#4C8DFF;--bg:#0A1020;--card:#111A2E;--line:#1F2B47;--muted:#8A96B2}
 html,body,.stApp,.stMarkdown,button,input,textarea,[data-baseweb]{font-family:"Source Sans Pro","Source Sans 3","Noto Sans Malayalam","Noto Sans Devanagari",sans-serif}
-#MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"]{visibility:hidden;height:0}
+#MainMenu, footer, [data-testid="stDecoration"], [data-testid="stToolbarActions"], [data-testid="stAppDeployButton"], [data-testid="stMainMenu"]{visibility:hidden}
+[data-testid="stExpandSidebarButton"],[data-testid="stSidebarCollapsedControl"],[data-testid="collapsedControl"]{visibility:visible!important;display:flex!important;background:#111A2E;border:1px solid #1F2B47;border-radius:8px}
 [data-testid="stHeader"]{background:transparent}
 .block-container{padding-top:2.2rem;padding-bottom:3rem;max-width:1280px}
 .stApp{background:radial-gradient(1200px 500px at 85% -10%,rgba(29,211,160,.10),transparent 60%),var(--bg)}
@@ -784,7 +882,7 @@ with st.sidebar:
     st.divider()
     region = st.selectbox(t("region"), ["IN", "US", "GB", "AE", "SG"], index=0)
     lang = st.selectbox(t("slang"), ["hi", "ml", "en", "ta", "te", "bn", "mr"], index=0)
-    days = st.select_slider(t("days"), [7, 30, 90, 180, 365, 0], value=180,
+    days = st.select_slider(t("days"), [1, 2, 7, 30, 90, 180, 365, 0], value=180,
                             format_func=lambda x: t("any_time") if x == 0 else str(x))
     order = st.selectbox(t("order"), ["viewCount", "relevance", "date", "rating"], index=0)
     duration = st.selectbox(t("length"), ["any", "short", "medium", "long"], index=0, help=t("length_help"))
@@ -844,8 +942,8 @@ def app_page():
     if demo or not key:
         st.info(t("demo_info"))
 
-    tabs = st.tabs([t("tab1"), t("tab6"), t("tab7"), t("tab8"), t("tab2"), t("tab3"), t("tab4"), t("tab5")])
-    tab1, tab6, tab7, tab8, tab2, tab3, tab4, tab5 = tabs
+    tabs = st.tabs([t("tab1"), t("tab9"), t("tab6"), t("tab7"), t("tab8"), t("tab2"), t("tab3"), t("tab4"), t("tab5")])
+    tab1, tab9, tab6, tab7, tab8, tab2, tab3, tab4, tab5 = tabs
 
     with tab1:
         kws = st.text_area(t("kw_label"), "reverse dcf hindi\nintrinsic value kaise nikale\nstock valuation hindi", height=110)
@@ -931,6 +1029,63 @@ def app_page():
         else:
             st.markdown(f'<div class="ins"><div class="bar" style="background:#1DD3A0"></div><div>{t("empty")}</div></div>',
                         unsafe_allow_html=True)
+
+    with tab9:
+        allv = st.session_state.get("all")
+        if allv is None:
+            st.info(t("need_run"))
+        else:
+            modes = ["all", "d1", "d2", "d7", "d30", "day"]
+            mode = st.radio(t("bz_window"), modes, horizontal=True, format_func=lambda m_: t("bz_" + m_), index=0)
+            day_pick = st.date_input(t("bz_pick_day"), dt.datetime.now(IST).date()) if mode == "day" else None
+            sub = window_filter(allv, mode, day_pick)
+            if sub.empty:
+                st.warning(t("bz_none"))
+            else:
+                st.markdown('<div class="kpis" style="grid-template-columns:repeat(3,1fr)">' + kpi(t("k_videos"), fmt(len(sub)))
+                            + kpi(t("k_ch"), fmt(sub["channel_id"].nunique()), BLUE) + kpi(t("c_totviews"), fmt(sub["views"].sum()), AMBER) + "</div>",
+                            unsafe_allow_html=True)
+                custom = st.text_input(t("bz_custom"), placeholder="Suzlon, Waaree, Tata Power")
+                crx = compile_defs({c_.strip().title(): [c_.strip()] for c_ in custom.split(",") if c_.strip()}) if custom.strip() else {}
+                stk = entity_stats(sub, {**crx, **STOCK_RX})
+                trm = entity_stats(sub, TERM_RX)
+                cfg = {"name": t("bz_col_name"), "videos": t("c_videos"), "channels": t("c_channels"),
+                       "total_views": st.column_config.NumberColumn(t("c_totviews"), format="%d"),
+                       "median_vpd": t("c_vpd"), "newest_h": t("c_newest")}
+                for title_key, tbl, color in [("bz_stocks", stk, TEAL), ("bz_terms", trm, BLUE)]:
+                    st.markdown(f'<div class="sec">{t(title_key)}</div>', unsafe_allow_html=True)
+                    if tbl.empty:
+                        st.write(t("bz_nomatch"))
+                        continue
+                    st.altair_chart(alt.Chart(tbl.head(12)).mark_bar(color=color, cornerRadiusEnd=4).encode(
+                        x=alt.X("videos:Q", title=t("c_videos")), y=alt.Y("name:N", sort="-x", title=None),
+                        tooltip=["name", "videos", "channels", "total_views"]).properties(height=max(120, 30 * min(len(tbl), 12))), theme=None)
+                    st.dataframe(tbl, hide_index=True, column_config=cfg, height=min(360, 40 + 36 * len(tbl)))
+
+                st.markdown(f'<div class="sec">{t("bz_phr")}</div>', unsafe_allow_html=True)
+                pa, pb = st.columns(2)
+                pa.dataframe(title_words(sub, 20), hide_index=True)
+                bgm = bigrams(sub, 15)
+                if len(bgm):
+                    pb.dataframe(bgm, hide_index=True)
+
+                names = list(stk["name"]) + list(trm["name"])
+                if names:
+                    st.markdown(f'<div class="sec">{t("bz_pick")}</div>', unsafe_allow_html=True)
+                    pick = st.selectbox(t("bz_pick"), names, label_visibility="collapsed")
+                    rx = {**crx, **STOCK_RX, **TERM_RX}[pick]
+                    hit = sub[video_text(sub).apply(lambda s_: bool(rx.search(s_)))].sort_values("views_per_day", ascending=False)
+                    st.markdown(f'<div class="sec">{t("bz_top")}</div>', unsafe_allow_html=True)
+                    video_cards(hit, 6)
+                    st.link_button(t("bz_trends"), "https://trends.google.com/trends/explore?date=now%201-d&geo=IN&gprop=youtube&q="
+                                   + requests.utils.quote(pick))
+                    st.markdown(f'<div class="sec">{t("bz_ac")}</div>', unsafe_allow_html=True)
+                    sug = list(dict.fromkeys(sum([autocomplete(pick + sfx) for sfx in ["", " share", " today", " news", " analysis"]], [])))
+                    if sug:
+                        st.markdown("".join(f'<span class="chip">{html.escape(x_)}</span>' for x_ in sug[:20]), unsafe_allow_html=True)
+                    else:
+                        st.write(t("sug_none"))
+                st.caption(t("bz_note"))
 
     with tab6:
         frames = st.session_state.get("frames")
@@ -1192,21 +1347,48 @@ def app_page():
                 st.warning(t("sug_none"))
 
     with tab5:
-        cats = ["27", "25", "22", "24", "28"]
-        cat_names = [t(f"cat{c}") for c in cats]
-        cat = cats[cat_names.index(st.selectbox(t("category"), cat_names))]
-        if st.button(t("load_tr"), type="primary"):
-            if demo or not key:
-                st.info(t("tr_need"))
+        chart_names = [t(f"cat{c}") for c in CHART_CATS]
+        topic_names = ["🔎 " + t("tp_" + k) for k in TOPIC_Q]
+        custom_label = "✏️ " + t("tp_custom")
+        all_names = chart_names + topic_names + [custom_label]
+        choice = st.selectbox(t("category"), all_names)
+        ci = all_names.index(choice)
+        is_chart = ci < len(CHART_CATS)
+        if not is_chart:
+            c1_, c2_ = st.columns(2)
+            win = c1_.selectbox(t("days"), [1, 2, 7, 30], index=2)
+            ord_ = c2_.selectbox(t("order"), ["viewCount", "date"])
+            if choice == custom_label:
+                q_ = st.text_input(t("tp_custom"), "stock market india")
             else:
-                try:
-                    vids, subs = trending(key, region, cat)
-                    tr = to_frame(vids, subs)
-                    st.dataframe(tr[["title", "channel", "subs", "views", "views_per_day", "minutes", "age_days", "url"]],
-                                 column_config={"url": st.column_config.LinkColumn(t("link"), display_text=t("open"))},
-                                 hide_index=True)
-                except Exception as e:
-                    st.error(str(e))
+                q_ = TOPIC_Q[list(TOPIC_Q)[ci - len(CHART_CATS)]]
+            st.caption(t("tr_note"))
+        if st.button(t("load_tr"), type="primary"):
+            try:
+                if is_chart:
+                    if demo or not key:
+                        st.info(t("tr_need"))
+                        tr = None
+                    else:
+                        vids, subs = trending(key, region, CHART_CATS[ci])
+                        tr = to_frame(vids, subs)
+                else:
+                    if demo or not key:
+                        tr = demo_frame(q_, 50)
+                    else:
+                        ids = search_ids(key, q_, win, region, lang, ord_, "any", 50)
+                        vids, subs = details(key, tuple(ids))
+                        tr = to_frame(vids, subs)
+                st.session_state["tr_frame"] = None if tr is None else (choice, tr)
+            except Exception as e:
+                st.error(str(e))
+        if st.session_state.get("tr_frame"):
+            lab_, tr = st.session_state["tr_frame"]
+            st.dataframe(tr[["title", "channel", "subs", "views", "views_per_day", "outlier", "minutes", "age_days", "url"]],
+                         column_config={"url": st.column_config.LinkColumn(t("link"), display_text=t("open"))}, hide_index=True)
+            if st.button(t("tr_add")):
+                st.session_state.setdefault("frames", {})[lab_.replace("🔎 ", "").replace("✏️ ", "")] = tr
+                st.success(t("tr_added"))
 
 
 if st.session_state["page"] == "home":
