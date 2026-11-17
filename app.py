@@ -16,7 +16,7 @@ import pandas as pd
 import altair as alt
 import streamlit as st
 
-from i18n import t, LANGS
+from i18n import t, LANGS, idx
 
 API = "https://www.googleapis.com/youtube/v3"
 DEVA = re.compile(r"[ऀ-ॿ]")
@@ -253,13 +253,13 @@ FORMAT_WORDS = set("explained explain guide beginner beginners complete basics b
 PATTERNS = {
     "how": r"\bhow\b|kaise|कैसे|എങ്ങനെ",
     "explained": r"explain|samjh|समझ|what is|kya hai|क्या है|എന്താണ്",
-    "beginner": r"beginner|basics?|intro|introduction|course|\bep\.?\s?\d|complete guide|शुरुआत",
-    "mistakes": r"mistake|galti|गलती|avoid|wrong|myth|fail",
-    "vs": r"\bvs\.?\b|versus|difference|compared",
+    "beginner": r"beginner|basics?|intro|introduction|course|\bep\.?\s?\d|complete guide|शुरुआत|बेसिक|തുടക്കക്കാർ|അടിസ്ഥാന",
+    "mistakes": r"mistake|galti|गलती|गलतियाँ|avoid|wrong|myth|मिथक|fail|തെറ്റ്|തെറ്റുകൾ",
+    "vs": r"\bvs\.?\b|versus|difference|compared|बनाम|फ़र्क|फर्क|വ്യത്യാസം",
     "number": r"\b\d+\b",
     "question": r"\?",
-    "secret": r"hidden|secret|truth|reality|\bwhy\b",
-    "example": r"example|case study|\blive\b|demo|\breal\b",
+    "secret": r"hidden|secret|truth|reality|\bwhy\b|छिपी|छिपा|क्यों|മറഞ്ഞിരിക്കുന്ന|എന്തുകൊണ്ട്",
+    "example": r"example|case study|\blive\b|demo|\breal\b|उदाहरण|ഉദാഹരണം",
 }
 TEMPLATES = {
     "how": ("How to Use {T} on {A}: Step by Step", "How {T} Works: A Simple Step by Step Guide"),
@@ -272,6 +272,32 @@ TEMPLATES = {
     "secret": ("The Hidden Role of {T} in {A}", "The Hidden Force Behind {T}"),
     "example": ("{T} Real Example with {A} Data", "{T} Real Example, Step by Step"),
 }
+TEMPLATES_L = {
+    "hi": {
+        "how": ("{A} पर {T} का उपयोग कैसे करें: स्टेप बाय स्टेप", "{T} कैसे काम करता है: आसान स्टेप बाय स्टेप गाइड"),
+        "explained": ("{T} क्या है? {A} के उदाहरण के साथ समझें", "{T} क्या है? आसान भाषा में समझें"),
+        "beginner": ("शुरुआती लोगों के लिए {T}: {A} के उदाहरण सहित", "शुरुआती लोगों के लिए {T}: पूरी बेसिक्स"),
+        "mistakes": ("{T} में होने वाली 5 आम गलतियाँ", "{T} में होने वाली 5 आम गलतियाँ"),
+        "vs": ("{T} बनाम {M}: फ़र्क क्या है?", "{T} बनाम {M}: फ़र्क क्या है?"),
+        "number": ("{T} के बारे में 5 ज़रूरी बातें ({A})", "{T} के बारे में 5 ज़रूरी बातें"),
+        "question": ("{T} क्या है? {A} के उदाहरण के साथ साफ़ जवाब", "{T} क्या है? साफ़ और सरल जवाब"),
+        "secret": ("{A} में {T} की छिपी भूमिका", "{T} के पीछे की छिपी ताकत"),
+        "example": ("{T} का असली उदाहरण: {A} डेटा के साथ", "{T} का असली उदाहरण, स्टेप बाय स्टेप"),
+    },
+    "ml": {
+        "how": ("{A}-ൽ {T} എങ്ങനെ ഉപയോഗിക്കാം: സ്റ്റെപ്പ് ബൈ സ്റ്റെപ്പ്", "{T} എങ്ങനെ പ്രവർത്തിക്കുന്നു: ലളിതമായ ഗൈഡ്"),
+        "explained": ("{T} എന്താണ്? {A} ഉദാഹരണങ്ങളോടെ മനസ്സിലാക്കാം", "{T} എന്താണ്? ലളിതമായി മനസ്സിലാക്കാം"),
+        "beginner": ("തുടക്കക്കാർക്കായി {T}: {A} ഉദാഹരണങ്ങളോടെ", "തുടക്കക്കാർക്കായി {T}: അടിസ്ഥാനങ്ങൾ മുഴുവൻ"),
+        "mistakes": ("{T}: ഒഴിവാക്കേണ്ട 5 സാധാരണ തെറ്റുകൾ", "{T}: ഒഴിവാക്കേണ്ട 5 സാധാരണ തെറ്റുകൾ"),
+        "vs": ("{T} vs {M}: എന്താണ് വ്യത്യാസം?", "{T} vs {M}: എന്താണ് വ്യത്യാസം?"),
+        "number": ("{T} അറിയേണ്ട 5 കാര്യങ്ങൾ ({A})", "{T} അറിയേണ്ട 5 കാര്യങ്ങൾ"),
+        "question": ("{T} എന്താണ്? {A} ഉദാഹരണത്തോടെ വ്യക്തമായ ഉത്തരം", "{T} എന്താണ്? വ്യക്തവും ലളിതവുമായ ഉത്തരം"),
+        "secret": ("{A}-ൽ {T}-ന്റെ മറഞ്ഞിരിക്കുന്ന പങ്ക്", "{T}-ന് പിന്നിലെ മറഞ്ഞിരിക്കുന്ന ശക്തി"),
+        "example": ("{T} യഥാർത്ഥ ഉദാഹരണം: {A} ഡാറ്റയോടെ", "{T} യഥാർത്ഥ ഉദാഹരണം, സ്റ്റെപ്പ് ബൈ സ്റ്റെപ്പ്"),
+    },
+}
+NATIVE_SUFFIX = {"hi": ["क्या है", "कैसे", "हिंदी में", "समझें", "शुरुआती के लिए"],
+                 "ml": ["എന്താണ്", "മലയാളത്തിൽ", "ലളിതമായി", "തുടക്കക്കാർക്ക്"]}
 UNTAPPED_ORDER = ["mistakes", "vs", "example", "beginner", "how", "explained", "secret", "question", "number"]
 
 
@@ -317,11 +343,16 @@ def related_term(df: pd.DataFrame, kw: str):
     return None
 
 
-def suggest_titles(allv: pd.DataFrame, kw: str, angle: str, n_proven=3, n_untapped=2) -> list:
+def ui_code() -> str:
+    return ("en", "ml", "hi")[idx()]
+
+
+def suggest_titles(allv: pd.DataFrame, kw: str, angle: str, lang="en", topic="", n_proven=3, n_untapped=2) -> list:
     stats = pattern_stats(allv)
     a_terms = [x.strip() for x in (angle or "").split(",") if x.strip()]
     A = a_terms[0].upper() if a_terms and len(a_terms[0]) <= 12 else (a_terms[0].title() if a_terms else "")
-    T = kw.strip().title()
+    T = (topic or "").strip() or kw.strip().title()
+    tpls = TEMPLATES if lang == "en" else TEMPLATES_L[lang]
     M = related_term(allv, kw)
     proven = stats[(stats["videos"] >= 2) & stats["lift"].notna()].sort_values("lift", ascending=False)
     if proven.empty:
@@ -332,7 +363,7 @@ def suggest_titles(allv: pd.DataFrame, kw: str, angle: str, n_proven=3, n_untapp
     def make(pat, kind, n, lift):
         if pat == "vs" and not M:
             return
-        tpl = TEMPLATES[pat][0 if A else 1]
+        tpl = tpls[pat][0 if A else 1]
         title = tpl.format(T=T, A=A, M=M or "")
         if title not in used:
             used.add(title)
@@ -371,11 +402,23 @@ def smart_tags(allv: pd.DataFrame, keywords: list, top_n=40) -> pd.DataFrame:
     return out.sort_values("_s", ascending=False).drop(columns="_s").head(top_n)
 
 
-def build_tags(allv: pd.DataFrame, keywords: list, angle: str):
+def native_names(keys) -> dict:
+    return {k: st.session_state.get(f"tn_{k}", "") for k in keys}
+
+
+def best_keyword(frames: dict, small: int) -> str:
+    return max(frames, key=lambda k: (opportunity(frames[k], small)["score"] or 0))
+
+
+def build_tags(allv: pd.DataFrame, keywords: list, angle: str, lang="en", native=None, focus=None):
     tg = smart_tags(allv, keywords)
     seed = [k.lower().strip() for k in keywords] + [x.strip().lower() for x in (angle or "").split(",") if x.strip()]
     seed = [x for x in seed if safe_word(x)]
-    merged = pd.DataFrame({"tag": list(dict.fromkeys(seed + list(tg["tag"])))})
+    nat = []
+    if lang != "en" and focus:
+        base = ((native or {}).get(focus) or "").strip() or focus.strip()
+        nat = [base] + [f"{base} {s_}" for s_ in NATIVE_SUFFIX[lang]]
+    merged = pd.DataFrame({"tag": list(dict.fromkeys(nat + seed + list(tg["tag"])))})
     return tg, tag_string(merged)
 
 
@@ -386,8 +429,14 @@ def video_plan(allv: pd.DataFrame, frames: dict, small: int) -> dict:
     pool = frames[kw]
     top = pool.sort_values("views_per_day", ascending=False).head(max(10, len(pool) // 4))
     angle = st.session_state.get("angle", "")
-    drafts = [x["title"] for x in suggest_titles(allv, kw, angle)][:4]
-    _, tagstr = build_tags(allv, list(frames), angle)
+    lc = ui_code()
+    en_t = [x["title"] for x in suggest_titles(allv, kw, angle)]
+    if lc != "en":
+        nat_t = [x["title"] for x in suggest_titles(allv, kw, angle, lc, st.session_state.get(f"tn_{kw}", ""))]
+        drafts = nat_t[:3] + en_t[:2]
+    else:
+        drafts = en_t[:4]
+    _, tagstr = build_tags(allv, list(frames), angle, lc, native_names(frames), kw)
     br = pool.dropna(subset=["outlier"])
     br = br[br["subs"] <= small].sort_values("outlier", ascending=False)
     model = br.iloc[0] if len(br) else top.iloc[0]
@@ -398,9 +447,12 @@ def video_plan(allv: pd.DataFrame, frames: dict, small: int) -> dict:
 def excel_report(allv, frames, small, angle) -> bytes:
     from io import BytesIO
     kw = max(((k, opportunity(f, small)["score"] or 0) for k, f in frames.items()), key=lambda x: x[1])[0]
-    tg, tagstr = build_tags(allv, list(frames), angle)
+    tg, tagstr = build_tags(allv, list(frames), angle, ui_code(), native_names(frames), kw)
     gaps = pd.DataFrame([dict(keyword=k, **opportunity(f, small)) for k, f in frames.items()])
-    titles = pd.DataFrame(suggest_titles(allv, kw, angle))
+    lc = ui_code()
+    titles = pd.DataFrame([dict(language="en", **x) for x in suggest_titles(allv, kw, angle)]
+                          + ([dict(language=lc, **x) for x in suggest_titles(allv, kw, angle, lc, st.session_state.get(f"tn_{kw}", ""))]
+                             if lc != "en" else []))
     sub = subtopics(allv, {w for k in frames for w in WORD.findall(k.lower())})
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as xw:
@@ -891,12 +943,20 @@ def app_page():
             kws_list = sorted(frames, key=lambda k: -sc[k])
             kw = st.selectbox(t("tl_pick"), kws_list)
 
-            st.markdown(f'<div class="sec">{t("sec_titles")}</div>', unsafe_allow_html=True)
-            for sgt in suggest_titles(allv, kw, angle):
-                why = (t("tl_proven", n=sgt["n"], x=f"{sgt['lift']:.1f}") if sgt["kind"] == "proven" else t("tl_untapped"))
-                color = TEAL if sgt["kind"] == "proven" else AMBER
-                st.markdown(f'<div class="ins"><div class="bar" style="background:{color}"></div><div><b>{html.escape(sgt["title"])}</b>'
-                            f'<span class="pm">{t("pat_" + sgt["pattern"])}  ·  {why}</span></div></div>', unsafe_allow_html=True)
+            lc = ui_code()
+            tn = ""
+            if lc != "en":
+                tn = st.text_input(t("tn_label"), key=f"tn_{kw}", help=t("tn_help"))
+                heads = [(lc, t("sec_titles_native")), ("en", t("sec_titles_en"))]
+            else:
+                heads = [("en", t("sec_titles"))]
+            for code, head in heads:
+                st.markdown(f'<div class="sec">{head}</div>', unsafe_allow_html=True)
+                for sgt in suggest_titles(allv, kw, angle, code, tn if code != "en" else ""):
+                    why = (t("tl_proven", n=sgt["n"], x=f"{sgt['lift']:.1f}") if sgt["kind"] == "proven" else t("tl_untapped"))
+                    color = TEAL if sgt["kind"] == "proven" else AMBER
+                    st.markdown(f'<div class="ins"><div class="bar" style="background:{color}"></div><div><b>{html.escape(sgt["title"])}</b>'
+                                f'<span class="pm">{t("pat_" + sgt["pattern"])}  ·  {why}</span></div></div>', unsafe_allow_html=True)
             st.caption(t("tl_note"))
 
             st.markdown(f'<div class="sec">{t("sec_pat")}</div>', unsafe_allow_html=True)
@@ -1075,7 +1135,9 @@ def app_page():
                     st.altair_chart(alt.Chart(tt.head(20)).mark_bar(color=TEAL, cornerRadiusEnd=4).encode(
                         x=alt.X("videos:Q", title=t("ax_tagvideos")), y=alt.Y("tag:N", sort="-x", title=None),
                         tooltip=["tag", "videos", "share_pct"]).properties(height=430), theme=None)
-                    st.text_area(t("tagstr"), build_tags(allv, list(st.session_state.get("frames", {})), st.session_state.get("angle", ""))[1], height=90)
+                    _fr = st.session_state.get("frames", {})
+                    st.text_area(t("tagstr") if ui_code() == "en" else t("tagstr_native"),
+                                 build_tags(allv, list(_fr), st.session_state.get("angle", ""), ui_code(), native_names(_fr), best_keyword(_fr, small_ch))[1], height=100)
             with b:
                 st.markdown(f'<div class="sec">{t("sec_words")}</div>', unsafe_allow_html=True)
                 st.altair_chart(alt.Chart(title_words(top).head(20)).mark_bar(color=BLUE, cornerRadiusEnd=4).encode(
@@ -1131,7 +1193,8 @@ def app_page():
 
     with tab5:
         cats = ["27", "25", "22", "24", "28"]
-        cat = st.selectbox(t("category"), cats, format_func=lambda c: t(f"cat{c}"))
+        cat_names = [t(f"cat{c}") for c in cats]
+        cat = cats[cat_names.index(st.selectbox(t("category"), cat_names))]
         if st.button(t("load_tr"), type="primary"):
             if demo or not key:
                 st.info(t("tr_need"))
