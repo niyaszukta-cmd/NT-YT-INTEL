@@ -105,6 +105,10 @@ def details(_key, ids: tuple):
     return vids, subs
 
 
+FRAME_COLS = ["vid", "title", "channel", "channel_id", "published", "age_days", "views", "likes", "comments", "subs", "minutes",
+              "views_per_day", "outlier", "engagement_pct", "title_len", "deva_pct", "tags", "desc", "caption", "published_at", "url"]
+
+
 def to_frame(vids, subs) -> pd.DataFrame:
     now = dt.datetime.now(dt.timezone.utc)
     rows = []
@@ -126,7 +130,7 @@ def to_frame(vids, subs) -> pd.DataFrame:
             title_len=len(title), deva_pct=round(len(DEVA.findall(title)) / max(len(title), 1) * 100),
             tags=sn.get("tags", []), desc=sn.get("description", ""), caption=(cd.get("caption") == "true"),
             published_at=sn["publishedAt"], url=f"https://www.youtube.com/watch?v={v['id']}"))
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=FRAME_COLS)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -996,6 +1000,12 @@ def app_page():
                         vids, subs = details(key, tuple(ids))
                         frames[k] = to_frame(vids, subs)
                 prog.empty()
+                empty = [k for k, f in frames.items() if f.empty]
+                frames = {k: f for k, f in frames.items() if not f.empty}
+                if empty:
+                    st.warning(t("no_vids", k=", ".join(empty)))
+                if not frames:
+                    st.stop()
                 st.session_state["frames"] = frames
             except Exception as e:
                 prog.empty()
@@ -1432,7 +1442,9 @@ def app_page():
             lab_, tr = st.session_state["tr_frame"]
             st.dataframe(tr[["title", "channel", "subs", "views", "views_per_day", "outlier", "minutes", "age_days", "url"]],
                          column_config={"url": st.column_config.LinkColumn(t("link"), display_text=t("open"))}, hide_index=True)
-            if st.button(t("tr_add")):
+            if tr.empty:
+                st.warning(t("no_vids", k=lab_))
+            elif st.button(t("tr_add")):
                 st.session_state.setdefault("frames", {})[lab_.replace("🔎 ", "").replace("✏️ ", "")] = tr
                 st.success(t("tr_added"))
 
