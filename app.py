@@ -124,7 +124,8 @@ def to_frame(vids, subs) -> pd.DataFrame:
             views_per_day=round(views / age), outlier=round(views / sub, 2) if sub else None,
             engagement_pct=round((likes + com) / views * 100, 2) if views else 0.0,
             title_len=len(title), deva_pct=round(len(DEVA.findall(title)) / max(len(title), 1) * 100),
-            tags=sn.get("tags", []), url=f"https://www.youtube.com/watch?v={v['id']}"))
+            tags=sn.get("tags", []), desc=sn.get("description", ""), caption=(cd.get("caption") == "true"),
+            published_at=sn["publishedAt"], url=f"https://www.youtube.com/watch?v={v['id']}"))
     return pd.DataFrame(rows)
 
 
@@ -403,18 +404,176 @@ def excel_report(allv, frames, small, angle) -> bytes:
     sub = subtopics(allv, {w for k in frames for w in WORD.findall(k.lower())})
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as xw:
-        allv.drop(columns=["tags"]).to_excel(xw, sheet_name="Videos", index=False)
+        allv.drop(columns=["tags", "desc"]).to_excel(xw, sheet_name="Videos", index=False)
         pattern_stats(allv).to_excel(xw, sheet_name="Title formats", index=False)
         titles.to_excel(xw, sheet_name="Suggested titles", index=False)
         sub.to_excel(xw, sheet_name="Under-served subtopics", index=False)
         tg.to_excel(xw, sheet_name="Tags", index=False)
         pd.DataFrame({"tag_string": [tagstr]}).to_excel(xw, sheet_name="Tag string", index=False)
         gaps.to_excel(xw, sheet_name="Keyword gaps", index=False)
+        ideas = [dict(video_id=v, question=q) for v, qs in st.session_state.get("ideas", {}).items() for q in qs]
+        if ideas:
+            pd.DataFrame(ideas).to_excel(xw, sheet_name="Viewer questions", index=False)
         for ws in xw.book.worksheets:
             for col in ws.columns:
                 w = max(len(str(c.value)) if c.value is not None else 0 for c in col[:60])
                 ws.column_dimensions[col[0].column_letter].width = min(max(10, w + 2), 70)
     return buf.getvalue()
+
+
+
+# ============================================================================= video and channel tools
+IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
+Q_WORDS = re.compile(r"\?|\b(how|what|why|can you|could you|please|which|when|kaise|kya|kyun|kyu|kab|kaun)\b|"
+                     r"कैसे|क्या|क्यों|कब|कृपया|എങ്ങനെ|എന്താണ്|എന്തുകൊണ്ട്|ഒന്ന് പറയാമോ", re.I)
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def video_comments(_key, vid, n=100):
+    try:
+        j = call("commentThreads", _key, part="snippet", videoId=vid, maxResults=min(n, 100),
+                 order="relevance", textFormat="plainText")
+    except RuntimeError:
+        return []
+    out = []
+    for it in j.get("items", []):
+        sn = it["snippet"]["topLevelComment"]["snippet"]
+        out.append(dict(text=sn.get("textDisplay", ""), likes=int(sn.get("likeCount", 0))))
+    return out
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def channel_overview(_key, cid):
+    it = call("channels", _key, part="snippet,statistics,contentDetails", id=cid)["items"][0]
+    up = it["contentDetails"]["relatedPlaylists"]["uploads"]
+    pl = call("playlistItems", _key, part="contentDetails", playlistId=up, maxResults=30)
+    ids = [x["contentDetails"]["videoId"] for x in pl.get("items", [])]
+    vids, subs = details(_key, tuple(ids))
+    return it, to_frame(vids, subs)
+
+
+def demo_comments(vid):
+    rnd = random.Random(sum(map(ord, str(vid))))
+    pool = ["Please explain this with a NIFTY example?", "Great video, very clear", "How do you read this on the option chain?",
+            "Kya yeh intraday me kaam karta hai?", "Can you make a full course on this?", "Thanks sir, subscribed",
+            "Why does the level change every day?", "Which tool do you use for this chart?", "Please do one in Hindi also",
+            "Kaise calculate karte hain?", "Nice explanation", "What is the difference between this and open interest?"]
+    return [dict(text=rnd.choice(pool), likes=rnd.randint(0, 120)) for _ in range(40)]
+
+
+def demo_channel(cid, subs, n=20):
+    rnd = random.Random(sum(map(ord, str(cid))))
+    now = dt.datetime.now(dt.timezone.utc)
+    vids = []
+    for i in range(n):
+        age = i * rnd.uniform(5, 14) + 2
+        views = int((subs or 20000) * rnd.lognormvariate(-0.8, 0.9))
+        vids.append({"id": f"democh{cid}_{i}", "snippet": {
+            "title": f"Episode {n - i}: " + rnd.choice(["Basics", "Explained", "Real example", "Common mistakes", "Q and A"]),
+            "channelId": cid, "channelTitle": f"Channel {str(cid)[1:]}",
+            "publishedAt": (now - dt.timedelta(days=age)).isoformat(), "tags": []},
+            "statistics": {"viewCount": views, "likeCount": int(views * .03), "commentCount": int(views * .002)},
+            "contentDetails": {"duration": f"PT{rnd.randint(5, 20)}M0S"}})
+    return to_frame(vids, {cid: subs or 20000})
+
+
+def get_channel(is_demo, key, cid, subs):
+    if is_demo or not key:
+        f = demo_channel(cid, subs)
+        return dict(title=f["channel"].iloc[0], subs=subs, videos=len(f) + 40, created="", country="IN"), f
+    it, f = channel_overview(key, cid)
+    s_ = it.get("statistics", {})
+    return dict(title=it["snippet"]["title"], subs=None if s_.get("hiddenSubscriberCount") else int(s_.get("subscriberCount", 0)),
+                videos=int(s_.get("videoCount", 0)), created=it["snippet"].get("publishedAt", "")[:10],
+                country=it["snippet"].get("country", "")), f
+
+
+def channel_stats(f: pd.DataFrame) -> dict:
+    n = len(f)
+    span = max(f["age_days"].max() - f["age_days"].min(), 1)
+    med = float(f["views"].median())
+    best = f.sort_values("views", ascending=False).iloc[0]
+    consistent = bool(med) and float(f["views"].quantile(.25)) / med >= 0.5
+    return dict(n=n, per_month=round(n / span * 30, 1), median=int(med), best=best, consistent=consistent)
+
+
+def comment_questions(comments: list, top=10) -> list:
+    seen, out = set(), []
+    for c in sorted(comments, key=lambda x: -x["likes"]):
+        txt = " ".join(c["text"].split())
+        key_ = txt.lower()[:60]
+        if 12 <= len(txt) <= 300 and Q_WORDS.search(txt) and key_ not in seen:
+            seen.add(key_)
+            out.append(dict(text=txt, likes=c["likes"]))
+    return out[:top]
+
+
+def cohort(allv: pd.DataFrame) -> pd.DataFrame:
+    return allv.sort_values("views_per_day", ascending=False).head(max(10, len(allv) // 4))
+
+
+def risky_in(text: str) -> list:
+    return sorted(set(WORD.findall(text.lower())) & RISKY)
+
+
+def packaging_checklist(r, allv: pd.DataFrame) -> list:
+    top = cohort(allv)
+    lo, hi = int(top["title_len"].quantile(.25)), int(top["title_len"].quantile(.75))
+    mlo, mhi = float(top["minutes"].quantile(.25)), float(top["minutes"].quantile(.75))
+    kws = [w for w in WORD.findall(str(r.get("keyword", "")).lower()) if w not in STOP and len(w) > 2]
+    desc = r.get("desc", "") or ""
+    first = " ".join(desc.splitlines()[:2]).lower()
+    have_desc = bool(desc.strip())
+    risk = risky_in(r["title"] + " " + " ".join(r["tags"]))
+    return [
+        ("ck_title_len", lo <= r["title_len"] <= hi, dict(a=lo, b=hi)),
+        ("ck_tags", len(r["tags"]) >= 5, {}),
+        ("ck_kw_title", (any(w in r["title"].lower() for w in kws) if kws else None), {}),
+        ("ck_kw_desc", (any(w in first for w in kws) if (kws and have_desc) else None), {}),
+        ("ck_chapters", (bool(re.search(r"(?m)^\s*\(?\d{1,2}:\d{2}", desc)) if have_desc else None), {}),
+        ("ck_hash", (1 <= len(re.findall(r"#\w+", desc)) <= 3 if have_desc else None), {}),
+        ("ck_len", mlo * 0.8 <= r["minutes"] <= mhi * 1.2, dict(a=f"{mlo:.0f}", b=f"{mhi:.0f}")),
+        ("ck_caps", bool(r.get("caption", False)), {}),
+        ("ck_risk", not risk, dict(w=(": " + ", ".join(risk)) if risk else "")),
+    ]
+
+
+def title_report(title: str, allv: pd.DataFrame, kw: str):
+    top = cohort(allv)
+    lo, hi = int(top["title_len"].quantile(.25)), int(top["title_len"].quantile(.75))
+    kws = [w for w in WORD.findall(kw.lower()) if w not in STOP and len(w) > 2]
+    ps = pattern_stats(allv)
+    good = set(ps[(ps["videos"] >= 2) & (ps["lift"] > 1)]["pattern"])
+    matched = [p for p, rx in PATTERNS.items() if re.search(rx, title, re.I)]
+    risk = risky_in(title)
+    return [
+        ("tc_len", lo <= len(title) <= hi, dict(L=len(title), lo=lo, hi=hi)),
+        ("tc_kw", (any(w in title.lower() for w in kws) if kws else None), {}),
+        ("tc_fmt", (bool(set(matched) & good) if good else None), {}),
+        ("ck_risk", not risk, dict(w=(": " + ", ".join(risk)) if risk else "")),
+    ], matched
+
+
+def timing_table(df: pd.DataFrame) -> pd.DataFrame:
+    d = df.copy()
+    ts = pd.to_datetime(d["published_at"], utc=True).dt.tz_convert(IST)
+    d["day"] = ts.dt.strftime("%a")
+    d["block"] = (ts.dt.hour // 4) * 4
+    top = d[d["views_per_day"] >= d["views_per_day"].quantile(.6)]
+    g = top.groupby(["day", "block"]).size().reset_index(name="videos")
+    g["slot"] = g["block"].map(lambda b: f"{b:02d}-{b + 4:02d}")
+    return g
+
+
+def render_checks(items: list):
+    rows = []
+    for key_, ok, kw in items:
+        ok = None if ok is None else bool(ok)
+        icon, color = ("✅", TEAL) if ok is True else (("❌", RED) if ok is False else ("➖", MUTED))
+        rows.append(f'<div class="ins"><div class="bar" style="background:{color}"></div><div>{icon}  {t(key_, **kw)}</div></div>')
+    st.markdown("".join(rows), unsafe_allow_html=True)
+    scored = [bool(ok) for _, ok, _ in items if ok is not None]
+    return round(sum(scored) / len(scored) * 100) if scored else 0
 
 
 # ============================================================================= styling
@@ -470,6 +629,7 @@ div[role="radiogroup"][aria-label="Language"],div[data-testid="stRadio"] div[rol
 .prow ul{margin:0 0 6px 18px;padding:0}.prow li{margin-bottom:4px}
 .pm{display:block;color:var(--muted);font-size:12.5px;margin-top:3px}
 .prow a{color:#E8EEF9!important;font-weight:700}
+.chip{display:inline-block;padding:3px 11px;margin:3px 4px 3px 0;border-radius:99px;background:#16233f;border:1px solid var(--line);font-size:12.5px}
 .vgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:10px 0 18px}
 .vcard{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;text-decoration:none!important;color:inherit!important;display:block}
 .vcard:hover{border-color:var(--teal);transform:translateY(-2px);transition:.15s}
@@ -632,8 +792,8 @@ def app_page():
     if demo or not key:
         st.info(t("demo_info"))
 
-    tabs = st.tabs([t("tab1"), t("tab6"), t("tab2"), t("tab3"), t("tab4"), t("tab5")])
-    tab1, tab6, tab2, tab3, tab4, tab5 = tabs
+    tabs = st.tabs([t("tab1"), t("tab6"), t("tab7"), t("tab8"), t("tab2"), t("tab3"), t("tab4"), t("tab5")])
+    tab1, tab6, tab7, tab8, tab2, tab3, tab4, tab5 = tabs
 
     with tab1:
         kws = st.text_area(t("kw_label"), "reverse dcf hindi\nintrinsic value kaise nikale\nstock valuation hindi", height=110)
@@ -694,7 +854,7 @@ def app_page():
                                "subs": st.column_config.NumberColumn("subs", format="%d"),
                                "views": st.column_config.NumberColumn("views", format="%d")},
                 hide_index=True, height=420)
-            st.download_button(t("dl"), show.drop(columns=["tags"]).to_csv(index=False).encode(),
+            st.download_button(t("dl"), show.drop(columns=["tags", "desc"]).to_csv(index=False).encode(),
                                "yt_scope_videos.csv", "text/csv")
             try:
                 st.download_button(t("dl_xlsx"), excel_report(allv, frames, small_ch, st.session_state.get("angle", "")),
@@ -781,6 +941,122 @@ def app_page():
                 st.dataframe(sub, hide_index=True,
                              column_config={"subtopic": t("c_sub"), "videos": t("c_videos"),
                                             "median_vpd": t("c_vpd"), "demand": t("c_demand")})
+
+    with tab7:
+        allv = st.session_state.get("all")
+        if allv is None:
+            st.info(t("need_run"))
+        else:
+            cand = allv.sort_values("views_per_day", ascending=False).head(60).reset_index(drop=True)
+            i_ = st.selectbox(t("vd_pick"), list(range(len(cand))),
+                              format_func=lambda i: f"{cand.loc[i, 'title'][:72]}  |  {cand.loc[i, 'channel']}")
+            r = cand.loc[i_]
+            is_demo_vid = str(r["vid"]).startswith("demo")
+            c1, c2 = st.columns([1, 2])
+            with c1:
+                if is_demo_vid:
+                    st.markdown('<div class="vcard"><div class="th"></div></div>', unsafe_allow_html=True)
+                else:
+                    st.image(f"https://i.ytimg.com/vi/{r['vid']}/hqdefault.jpg")
+            with c2:
+                st.markdown(f'<a href="{r["url"]}" target="_blank" style="font-size:20px;font-weight:800;color:#E8EEF9;'
+                            f'text-decoration:none">{html.escape(r["title"])}</a>'
+                            f'<div style="color:#8A96B2;margin-top:4px">{html.escape(str(r["channel"]))}  ·  {r["published"]}</div>',
+                            unsafe_allow_html=True)
+                x = f"{r['outlier']:.1f}x" if pd.notna(r["outlier"]) else "-"
+                st.markdown('<div class="kpis" style="grid-template-columns:repeat(4,1fr)">'
+                            + kpi(t("k_views"), fmt(r["views"]), BLUE) + kpi(t("c_vpd"), fmt(r["views_per_day"]))
+                            + kpi(t("c_outlier"), x, AMBER) + kpi(t("c_eng"), f"{r['engagement_pct']}%", RED) + "</div>",
+                            unsafe_allow_html=True)
+
+            st.markdown(f'<div class="sec">{t("vd_tags")}</div>', unsafe_allow_html=True)
+            if r["tags"]:
+                st.markdown("".join(f'<span class="chip">{html.escape(x_)}</span>' for x_ in r["tags"]), unsafe_allow_html=True)
+            else:
+                st.write(t("vd_notags"))
+
+            st.markdown(f'<div class="sec">{t("vd_pack")}</div>', unsafe_allow_html=True)
+            score = render_checks(packaging_checklist(r, allv))
+            st.caption(t("vd_score", s=score))
+            if (r["desc"] or "").strip():
+                with st.expander(t("vd_desc")):
+                    st.text(r["desc"][:1500])
+
+            st.markdown(f'<div class="sec">{t("vd_questions")}</div>', unsafe_allow_html=True)
+            ck = f"cm_{r['vid']}"
+            if st.button(t("vd_load_comments"), key="b_" + ck):
+                try:
+                    st.session_state[ck] = demo_comments(r["vid"]) if (demo or not key or is_demo_vid) else video_comments(key, r["vid"])
+                except Exception as e:
+                    st.error(str(e))
+            if ck in st.session_state:
+                cm = st.session_state[ck]
+                qs = comment_questions(cm)
+                st.session_state.setdefault("ideas", {})[r["vid"]] = [q["text"] for q in qs]
+                st.caption(t("vd_ncomm", n=len(cm)))
+                if qs:
+                    for q in qs:
+                        st.markdown(f'<div class="ins"><div class="bar" style="background:{AMBER}"></div>'
+                                    f'<div>{html.escape(q["text"])}<span class="pm">👍 {q["likes"]}</span></div></div>', unsafe_allow_html=True)
+                else:
+                    st.write(t("vd_nocomments"))
+
+            st.markdown(f'<div class="sec">{t("vd_channel")}</div>', unsafe_allow_html=True)
+            ck2 = f"ch_{r['channel_id']}"
+            if st.button(t("vd_load_channel"), key="b_" + ck2):
+                try:
+                    st.session_state[ck2] = get_channel(demo or is_demo_vid, key, r["channel_id"], r["subs"])
+                except Exception as e:
+                    st.error(str(e))
+            if ck2 in st.session_state:
+                info, cf = st.session_state[ck2]
+                cs = channel_stats(cf)
+                st.markdown('<div class="kpis">' + kpi(t("ch_subs"), fmt(info["subs"]))
+                            + kpi(t("ch_videos"), fmt(info["videos"]), BLUE) + kpi(t("ch_median"), fmt(cs["median"]), AMBER)
+                            + kpi(t("ch_rate"), str(cs["per_month"]), RED) + "</div>", unsafe_allow_html=True)
+                msg = t("ch_consistent") if cs["consistent"] else t("ch_spiky")
+                st.markdown(f'<div class="ins"><div class="bar" style="background:{TEAL if cs["consistent"] else AMBER}"></div><div>{msg}</div></div>',
+                            unsafe_allow_html=True)
+                b_ = cs["best"]
+                st.markdown(f'<div class="ins"><div class="bar" style="background:{BLUE}"></div><div>{t("ch_best")}: '
+                            f'<a href="{b_["url"]}" target="_blank">{html.escape(b_["title"])}</a> ({fmt(b_["views"])})</div></div>',
+                            unsafe_allow_html=True)
+                st.markdown(f'<div class="sec">{t("ch_recent")}</div>', unsafe_allow_html=True)
+                st.dataframe(cf[["title", "views", "views_per_day", "minutes", "age_days", "url"]].head(15),
+                             column_config={"url": st.column_config.LinkColumn(t("link"), display_text=t("open"))}, hide_index=True)
+
+    with tab8:
+        allv = st.session_state.get("all")
+        if allv is None:
+            st.info(t("need_run"))
+        else:
+            st.markdown(f'<div class="sec">{t("pk_check")}</div>', unsafe_allow_html=True)
+            kwl = list(st.session_state.get("frames", {}))
+            ca, cb = st.columns([3, 2])
+            draft = ca.text_input(t("pk_check_in"), "")
+            tkw = cb.selectbox(t("tl_pick"), kwl, key="pk_kw")
+            if draft.strip():
+                items, matched = title_report(draft.strip(), allv, tkw)
+                render_checks(items)
+                st.caption(t("pk_matched", f=", ".join(t("pat_" + p) for p in matched) if matched else t("pk_none")))
+
+            st.markdown(f'<div class="sec">{t("pk_timing")}</div>', unsafe_allow_html=True)
+            tt_ = timing_table(allv)
+            if len(tt_):
+                days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                st.altair_chart(alt.Chart(tt_).mark_rect(cornerRadius=4).encode(
+                    x=alt.X("slot:N", title=None, sort=["00-04", "04-08", "08-12", "12-16", "16-20", "20-24"]),
+                    y=alt.Y("day:N", sort=days, title=None),
+                    color=alt.Color("videos:Q", scale=alt.Scale(scheme="tealblues"), legend=None),
+                    tooltip=["day", "slot", "videos"]).properties(height=260), theme=None)
+                bt = tt_.sort_values("videos", ascending=False).iloc[0]
+                st.markdown(f'<div class="ins"><div class="bar" style="background:{TEAL}"></div><div>{t("pk_timing_best", d=bt["day"], b=bt["slot"])}</div></div>',
+                            unsafe_allow_html=True)
+                st.caption(t("pk_timing_cap"))
+
+            st.markdown(f'<div class="sec">{t("pk_gallery")}</div>', unsafe_allow_html=True)
+            video_cards(allv.sort_values("views_per_day", ascending=False), 12)
+            st.caption(t("pk_gallery_cap"))
 
     with tab2:
         allv = st.session_state.get("all")
@@ -875,4 +1151,4 @@ if st.session_state["page"] == "home":
 else:
     app_page()
 
-st.markdown(f'<div class="foot">{t("footer")}</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="foot">{t("footer")}<br>{t("tos")}</div>', unsafe_allow_html=True)
