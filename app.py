@@ -245,29 +245,176 @@ def safe_word(w: str) -> bool:
     return not (set(WORD.findall(w.lower())) & RISKY)
 
 
+INDIC = re.compile(r"[ऀ-෿]")
+FORMAT_WORDS = set("explained explain guide beginner beginners complete basics basic introduction course full step steps "
+                   "simple easy best live video tutorial using with from what that this your you why how the and for "
+                   "real example examples trading trade".split())
+PATTERNS = {
+    "how": r"\bhow\b|kaise|कैसे|എങ്ങനെ",
+    "explained": r"explain|samjh|समझ|what is|kya hai|क्या है|എന്താണ്",
+    "beginner": r"beginner|basics?|intro|introduction|course|\bep\.?\s?\d|complete guide|शुरुआत",
+    "mistakes": r"mistake|galti|गलती|avoid|wrong|myth|fail",
+    "vs": r"\bvs\.?\b|versus|difference|compared",
+    "number": r"\b\d+\b",
+    "question": r"\?",
+    "secret": r"hidden|secret|truth|reality|\bwhy\b",
+    "example": r"example|case study|\blive\b|demo|\breal\b",
+}
+TEMPLATES = {
+    "how": ("How to Use {T} on {A}: Step by Step", "How {T} Works: A Simple Step by Step Guide"),
+    "explained": ("{T} Explained with {A} Examples", "{T} Explained in Simple Words"),
+    "beginner": ("{T} for Beginners: {A} Examples Included", "{T} for Beginners: Complete Basics"),
+    "mistakes": ("{T}: 5 Common Mistakes to Avoid", "{T}: 5 Common Mistakes to Avoid"),
+    "vs": ("{T} vs {M}: What is the Difference?", "{T} vs {M}: What is the Difference?"),
+    "number": ("5 Things to Know About {T} for {A}", "5 Things to Know About {T}"),
+    "question": ("What is {T}? A Clear Answer with {A} Examples", "What is {T}? A Clear Answer"),
+    "secret": ("The Hidden Role of {T} in {A}", "The Hidden Force Behind {T}"),
+    "example": ("{T} Real Example with {A} Data", "{T} Real Example, Step by Step"),
+}
+UNTAPPED_ORDER = ["mistakes", "vs", "example", "beginner", "how", "explained", "secret", "question", "number"]
+
+
+def pattern_stats(df: pd.DataFrame) -> pd.DataFrame:
+    med = df["views_per_day"].median()
+    rows = []
+    for k, rx in PATTERNS.items():
+        m = df["title"].str.contains(rx, case=False, regex=True)
+        n = int(m.sum())
+        if n == 0:
+            rows.append(dict(pattern=k, videos=0, median_vpd=None, lift=None))
+        else:
+            mv = df.loc[m, "views_per_day"].median()
+            rows.append(dict(pattern=k, videos=n, median_vpd=int(mv), lift=round(mv / med, 2) if med else None))
+    return pd.DataFrame(rows)
+
+
+def subtopics(df: pd.DataFrame, exclude: set, top=15) -> pd.DataFrame:
+    med = df["views_per_day"].median()
+    bag = {}
+    for _, r in df.iterrows():
+        w = [x for x in WORD.findall(r["title"].lower())
+             if len(x) > 3 and x not in STOP and x not in FORMAT_WORDS and x not in exclude and safe_word(x)]
+        for g in set(w) | {" ".join(p) for p in zip(w, w[1:])}:
+            bag.setdefault(g, []).append(r["views_per_day"])
+    rows = []
+    cap = max(4, len(df) // 10)
+    for g, v in bag.items():
+        if 2 <= len(v) <= cap:
+            mv = float(pd.Series(v).median())
+            if med and mv >= med:
+                rows.append(dict(subtopic=g, videos=len(v), median_vpd=int(mv), demand=round(mv / med, 1),
+                                 _score=mv / med / len(v)))
+    out = pd.DataFrame(rows, columns=["subtopic", "videos", "median_vpd", "demand", "_score"])
+    return out.sort_values("_score", ascending=False).drop(columns="_score").head(top)
+
+
+def related_term(df: pd.DataFrame, kw: str):
+    kws = set(WORD.findall(kw.lower()))
+    for w in title_words(df, 40)["word"]:
+        if w not in kws and w not in FORMAT_WORDS and len(w) > 3 and safe_word(w):
+            return w.title()
+    return None
+
+
+def suggest_titles(allv: pd.DataFrame, kw: str, angle: str, n_proven=3, n_untapped=2) -> list:
+    stats = pattern_stats(allv)
+    a_terms = [x.strip() for x in (angle or "").split(",") if x.strip()]
+    A = a_terms[0].upper() if a_terms and len(a_terms[0]) <= 12 else (a_terms[0].title() if a_terms else "")
+    T = kw.strip().title()
+    M = related_term(allv, kw)
+    proven = stats[(stats["videos"] >= 2) & stats["lift"].notna()].sort_values("lift", ascending=False)
+    if proven.empty:
+        proven = stats[(stats["videos"] >= 1) & stats["lift"].notna()].sort_values("lift", ascending=False)
+    picks = [(r["pattern"], "proven", int(r["videos"]), float(r["lift"])) for _, r in proven.iterrows()]
+    out, used = [], set()
+
+    def make(pat, kind, n, lift):
+        if pat == "vs" and not M:
+            return
+        tpl = TEMPLATES[pat][0 if A else 1]
+        title = tpl.format(T=T, A=A, M=M or "")
+        if title not in used:
+            used.add(title)
+            out.append(dict(title=title, pattern=pat, kind=kind, n=n, lift=lift))
+
+    for pat, kind, n, lift in picks:
+        if len([o for o in out if o["kind"] == "proven"]) >= n_proven:
+            break
+        make(pat, kind, n, lift)
+    missing = [p for p in UNTAPPED_ORDER if int(stats.loc[stats["pattern"] == p, "videos"].iloc[0]) == 0]
+    for p in missing:
+        if len([o for o in out if o["kind"] == "untapped"]) >= n_untapped:
+            break
+        make(p, "untapped", 0, 0.0)
+    return out
+
+
+def smart_tags(allv: pd.DataFrame, keywords: list, top_n=40) -> pd.DataFrame:
+    kwset = {w for k in keywords for w in WORD.findall(k.lower()) if len(w) > 2 and w not in STOP}
+    best = allv.sort_values("views_per_day", ascending=False).head(max(10, len(allv) // 4))
+    rel = kwset | set(title_words(best, 30)["word"])
+    med = allv["views_per_day"].median()
+    norm = [[x.lower().strip() for x in ts] for ts in allv["tags"]]
+    pool = Counter(t_ for ts in norm for t_ in set(ts))
+    rows = []
+    for tag, n in pool.items():
+        if n < 2 or not (set(WORD.findall(tag)) & rel) or not safe_word(tag):
+            continue
+        mask = [tag in ts for ts in norm]
+        mv = allv.loc[mask, "views_per_day"].median()
+        rows.append(dict(tag=tag, videos=n, share_pct=round(n / len(allv) * 100), lift=round(mv / med, 2) if med else None))
+    out = pd.DataFrame(rows, columns=["tag", "videos", "share_pct", "lift"])
+    if out.empty:
+        return out
+    out["_s"] = out["videos"] ** 0.5 * out["lift"].fillna(1)
+    return out.sort_values("_s", ascending=False).drop(columns="_s").head(top_n)
+
+
+def build_tags(allv: pd.DataFrame, keywords: list, angle: str):
+    tg = smart_tags(allv, keywords)
+    seed = [k.lower().strip() for k in keywords] + [x.strip().lower() for x in (angle or "").split(",") if x.strip()]
+    seed = [x for x in seed if safe_word(x)]
+    merged = pd.DataFrame({"tag": list(dict.fromkeys(seed + list(tg["tag"])))})
+    return tg, tag_string(merged)
+
+
 def video_plan(allv: pd.DataFrame, frames: dict, small: int) -> dict:
     scores = [(k, opportunity(f, small)["score"]) for k, f in frames.items()]
     scored = [x for x in scores if x[1] is not None]
     kw, sc = max(scored, key=lambda x: x[1]) if scored else (list(frames)[0], None)
     pool = frames[kw]
     top = pool.sort_values("views_per_day", ascending=False).head(max(10, len(pool) // 4))
-    kw_words = set(WORD.findall(kw.lower()))
-    mods = [w for w in title_words(top, 40)["word"] if w not in kw_words and len(w) > 3 and safe_word(w)]
-    m = (mods + ["basics", "example", "method", "steps"])[:4]
-    base = kw.strip().title()
-    drafts = [f"{base}: {m[0].title()} {m[1].title()} Explained",
-              f"{base} for Beginners | {m[0].title()}",
-              f"{base} Step by Step with a Real Example",
-              f"{base}: Common Mistakes ({m[2].title()})"]
-    limit = max(int(top["title_len"].median()) + 15, 70)
-    drafts = [d if len(d) <= limit else d[:limit].rsplit(" ", 1)[0] for d in drafts]
-    tt = tag_table(top, 60)
-    tt = tt[tt["tag"].map(safe_word)]
+    angle = st.session_state.get("angle", "")
+    drafts = [x["title"] for x in suggest_titles(allv, kw, angle)][:4]
+    _, tagstr = build_tags(allv, list(frames), angle)
     br = pool.dropna(subset=["outlier"])
     br = br[br["subs"] <= small].sort_values("outlier", ascending=False)
     model = br.iloc[0] if len(br) else top.iloc[0]
-    return dict(keyword=kw, score=sc, drafts=drafts, tags=tag_string(tt), length=float(top["minutes"].median()),
+    return dict(keyword=kw, score=sc, drafts=drafts, tags=tagstr, length=float(top["minutes"].median()),
                 tlen=float(top["title_len"].median()), model=model)
+
+
+def excel_report(allv, frames, small, angle) -> bytes:
+    from io import BytesIO
+    kw = max(((k, opportunity(f, small)["score"] or 0) for k, f in frames.items()), key=lambda x: x[1])[0]
+    tg, tagstr = build_tags(allv, list(frames), angle)
+    gaps = pd.DataFrame([dict(keyword=k, **opportunity(f, small)) for k, f in frames.items()])
+    titles = pd.DataFrame(suggest_titles(allv, kw, angle))
+    sub = subtopics(allv, {w for k in frames for w in WORD.findall(k.lower())})
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as xw:
+        allv.drop(columns=["tags"]).to_excel(xw, sheet_name="Videos", index=False)
+        pattern_stats(allv).to_excel(xw, sheet_name="Title formats", index=False)
+        titles.to_excel(xw, sheet_name="Suggested titles", index=False)
+        sub.to_excel(xw, sheet_name="Under-served subtopics", index=False)
+        tg.to_excel(xw, sheet_name="Tags", index=False)
+        pd.DataFrame({"tag_string": [tagstr]}).to_excel(xw, sheet_name="Tag string", index=False)
+        gaps.to_excel(xw, sheet_name="Keyword gaps", index=False)
+        for ws in xw.book.worksheets:
+            for col in ws.columns:
+                w = max(len(str(c.value)) if c.value is not None else 0 for c in col[:60])
+                ws.column_dimensions[col[0].column_letter].width = min(max(10, w + 2), 70)
+    return buf.getvalue()
 
 
 # ============================================================================= styling
@@ -485,11 +632,12 @@ def app_page():
     if demo or not key:
         st.info(t("demo_info"))
 
-    tabs = st.tabs([t("tab1"), t("tab2"), t("tab3"), t("tab4"), t("tab5")])
-    tab1, tab2, tab3, tab4, tab5 = tabs
+    tabs = st.tabs([t("tab1"), t("tab6"), t("tab2"), t("tab3"), t("tab4"), t("tab5")])
+    tab1, tab6, tab2, tab3, tab4, tab5 = tabs
 
     with tab1:
         kws = st.text_area(t("kw_label"), "reverse dcf hindi\nintrinsic value kaise nikale\nstock valuation hindi", height=110)
+        st.text_input(t("angle_label"), key="angle", help=t("angle_help"), placeholder="nifty, banknifty")
         run = st.button(t("analyse"), type="primary")
 
         if run:
@@ -548,6 +696,12 @@ def app_page():
                 hide_index=True, height=420)
             st.download_button(t("dl"), show.drop(columns=["tags"]).to_csv(index=False).encode(),
                                "yt_scope_videos.csv", "text/csv")
+            try:
+                st.download_button(t("dl_xlsx"), excel_report(allv, frames, small_ch, st.session_state.get("angle", "")),
+                                   "yt_scope_report.xlsx",
+                                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            except Exception:
+                pass
 
             plot = allv.dropna(subset=["subs"]).copy()
             if len(plot):
@@ -566,6 +720,68 @@ def app_page():
             st.markdown(f'<div class="ins"><div class="bar" style="background:#1DD3A0"></div><div>{t("empty")}</div></div>',
                         unsafe_allow_html=True)
 
+    with tab6:
+        frames = st.session_state.get("frames")
+        allv = st.session_state.get("all")
+        if not frames or allv is None:
+            st.info(t("need_run"))
+        else:
+            angle = st.session_state.get("angle", "")
+            sc = {k: (opportunity(f, small_ch)["score"] or 0) for k, f in frames.items()}
+            kws_list = sorted(frames, key=lambda k: -sc[k])
+            kw = st.selectbox(t("tl_pick"), kws_list)
+
+            st.markdown(f'<div class="sec">{t("sec_titles")}</div>', unsafe_allow_html=True)
+            for sgt in suggest_titles(allv, kw, angle):
+                why = (t("tl_proven", n=sgt["n"], x=f"{sgt['lift']:.1f}") if sgt["kind"] == "proven" else t("tl_untapped"))
+                color = TEAL if sgt["kind"] == "proven" else AMBER
+                st.markdown(f'<div class="ins"><div class="bar" style="background:{color}"></div><div><b>{html.escape(sgt["title"])}</b>'
+                            f'<span class="pm">{t("pat_" + sgt["pattern"])}  ·  {why}</span></div></div>', unsafe_allow_html=True)
+            st.caption(t("tl_note"))
+
+            st.markdown(f'<div class="sec">{t("sec_pat")}</div>', unsafe_allow_html=True)
+            ps = pattern_stats(allv)
+            ps["format"] = ps["pattern"].map(lambda p: t("pat_" + p))
+            have = ps[ps["videos"] > 0].sort_values("lift", ascending=False)
+            if len(have):
+                st.altair_chart(alt.Chart(have).mark_bar(color=TEAL, cornerRadiusEnd=4).encode(
+                    x=alt.X("lift:Q", title=t("c_lift")), y=alt.Y("format:N", sort="-x", title=None),
+                    tooltip=["format", "videos", "median_vpd", "lift"]).properties(height=max(120, 34 * len(have))), theme=None)
+            st.dataframe(ps[["format", "videos", "median_vpd", "lift"]], hide_index=True,
+                         column_config={"format": t("c_pattern"), "videos": t("c_videos"),
+                                        "median_vpd": t("c_vpd"), "lift": t("c_lift")})
+            st.caption(t("pat_cap"))
+
+            st.markdown(f'<div class="sec">{t("sec_gap")}</div>', unsafe_allow_html=True)
+            missing = [t("pat_" + p) for p in ps.loc[ps["videos"] == 0, "pattern"]]
+            line = t("g_fmt", f=html.escape(", ".join(missing))) if missing else t("g_fmt_none")
+            st.markdown(f'<div class="ins"><div class="bar" style="background:{AMBER}"></div><div>{line}</div></div>', unsafe_allow_html=True)
+
+            terms = [x.strip().lower() for x in angle.split(",") if x.strip()]
+            if terms:
+                hit = allv.apply(lambda r: any(x in r["title"].lower() or any(x in tg.lower() for tg in r["tags"]) for x in terms), axis=1)
+                n_hit, tot = int(hit.sum()), len(allv)
+                pct = round(n_hit / tot * 100)
+                verdict = t("g_angle_gap") if pct < 15 else t("g_angle_busy")
+                line = t("g_angle", n=n_hit, tot=tot, p=pct, a=html.escape(", ".join(terms)), v=verdict)
+            else:
+                line = t("g_angle_empty")
+            st.markdown(f'<div class="ins"><div class="bar" style="background:{BLUE}"></div><div>{line}</div></div>', unsafe_allow_html=True)
+
+            native = round(allv["title"].apply(lambda x: bool(INDIC.search(x))).mean() * 100)
+            verdict = t("g_lang_gap") if native < 20 else t("g_lang_busy")
+            st.markdown(f'<div class="ins"><div class="bar" style="background:{RED}"></div><div>{t("g_lang", p=native, v=verdict)}</div></div>',
+                        unsafe_allow_html=True)
+
+            st.markdown(f'<div class="sec">{t("g_under")}</div>', unsafe_allow_html=True)
+            sub = subtopics(allv, {w for k in frames for w in WORD.findall(k.lower())})
+            if sub.empty:
+                st.write(t("g_under_none"))
+            else:
+                st.dataframe(sub, hide_index=True,
+                             column_config={"subtopic": t("c_sub"), "videos": t("c_videos"),
+                                            "median_vpd": t("c_vpd"), "demand": t("c_demand")})
+
     with tab2:
         allv = st.session_state.get("all")
         if allv is None:
@@ -583,7 +799,7 @@ def app_page():
                     st.altair_chart(alt.Chart(tt.head(20)).mark_bar(color=TEAL, cornerRadiusEnd=4).encode(
                         x=alt.X("videos:Q", title=t("ax_tagvideos")), y=alt.Y("tag:N", sort="-x", title=None),
                         tooltip=["tag", "videos", "share_pct"]).properties(height=430), theme=None)
-                    st.text_area(t("tagstr"), tag_string(tt), height=90)
+                    st.text_area(t("tagstr"), build_tags(allv, list(st.session_state.get("frames", {})), st.session_state.get("angle", ""))[1], height=90)
             with b:
                 st.markdown(f'<div class="sec">{t("sec_words")}</div>', unsafe_allow_html=True)
                 st.altair_chart(alt.Chart(title_words(top).head(20)).mark_bar(color=BLUE, cornerRadiusEnd=4).encode(
@@ -591,6 +807,12 @@ def app_page():
                 bg = bigrams(top)
                 if len(bg):
                     st.dataframe(bg, hide_index=True)
+            st.markdown(f'<div class="sec">{t("sec_taglift")}</div>', unsafe_allow_html=True)
+            stg = smart_tags(allv, list(st.session_state.get("frames", {})))
+            if len(stg):
+                st.dataframe(stg, hide_index=True, column_config={"tag": t("c_tag"), "videos": t("c_videos"),
+                             "share_pct": "%", "lift": t("c_lift")})
+            st.caption(t("tag_cap2"))
             st.markdown(f'<div class="sec">{t("sec_prof")}</div>', unsafe_allow_html=True)
             st.markdown('<div class="kpis" style="grid-template-columns:repeat(3,1fr)">'
                         + kpi(t("k_tlen"), t("chars", n=f"{top['title_len'].median():.0f}"))
