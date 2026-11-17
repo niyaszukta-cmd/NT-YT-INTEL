@@ -71,7 +71,7 @@ def fmt(n):
 # ============================================================================= data layer
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def search_ids(_key, query, days, region, lang, order, duration, max_results):
-    after = (dt.datetime.utcnow() - dt.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ") if days else None
+    after = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ") if days else None
     ids, token = [], None
     while len(ids) < max_results:
         p = dict(part="snippet", type="video", q=query, maxResults=min(50, max_results - len(ids)),
@@ -1103,10 +1103,10 @@ def app_page():
             st.markdown(f'<div class="sec">{t("pk_timing")}</div>', unsafe_allow_html=True)
             tt_ = timing_table(allv)
             if len(tt_):
-                days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                day_order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
                 st.altair_chart(alt.Chart(tt_).mark_rect(cornerRadius=4).encode(
                     x=alt.X("slot:N", title=None, sort=["00-04", "04-08", "08-12", "12-16", "16-20", "20-24"]),
-                    y=alt.Y("day:N", sort=days, title=None),
+                    y=alt.Y("day:N", sort=day_order, title=None),
                     color=alt.Color("videos:Q", scale=alt.Scale(scheme="tealblues"), legend=None),
                     tooltip=["day", "slot", "videos"]).properties(height=260), theme=None)
                 bt = tt_.sort_values("videos", ascending=False).iloc[0]
