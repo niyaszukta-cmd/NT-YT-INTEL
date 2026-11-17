@@ -381,6 +381,37 @@ def suggest_titles(allv: pd.DataFrame, kw: str, angle: str, lang="en", topic="",
     return out
 
 
+def consensus_title(top: pd.DataFrame, lang="en", topic="") -> dict:
+    """One title built from what the top videos agree on: shared phrase, shared words, winning format, year."""
+    chan = {w for c_ in top["channel"].astype(str) for w in WORD.findall(c_.lower())}
+    skip = {"more", "your", "you", "this", "that", "from", "with", "what", "why", "all", "new", "now"}
+    ok = lambda w: len(w) > 2 and w not in STOP and w not in skip and w not in chan and not w.isdigit() and safe_word(w)
+    n = len(top)
+    wc, pc = Counter(), Counter()
+    for ttl in top["title"]:
+        ws = WORD.findall(ttl.lower())
+        wc.update({w for w in ws if ok(w)})
+        pc.update({" ".join(p) for p in zip(ws, ws[1:]) if ok(p[0]) and ok(p[1])})
+    phrase = next((p for p, c in pc.most_common() if c >= 2), "")
+    if not phrase:
+        phrase = next((w for w, _ in wc.most_common()), "")
+    if not phrase:
+        return {}
+    used = set(phrase.split())
+    extras = [w for w, _ in wc.most_common(12) if w not in used][:2]
+    yr = str(dt.datetime.now(IST).year)
+    year_share = top["title"].str.contains(yr).mean()
+    T = topic.strip() or phrase.title()
+    sg = suggest_titles(top, phrase, "", lang, topic.strip(), n_proven=1, n_untapped=0)
+    title = sg[0]["title"] if sg else T + (": " + " ".join(extras).title() if extras else "")
+    pat = sg[0]["pattern"] if sg else ""
+    if year_share >= 0.15 and yr not in title:
+        title += f" ({yr})"
+    hits = int(top["title"].str.lower().str.contains(re.escape(phrase)).sum())
+    return dict(title=title, phrase=phrase, extras=extras, pattern=pat, hits=hits, n=n,
+                med_len=int(top["title_len"].median()), length=len(title))
+
+
 def smart_tags(allv: pd.DataFrame, keywords: list, top_n=40) -> pd.DataFrame:
     kwset = {w for k in keywords for w in WORD.findall(k.lower()) if len(w) > 2 and w not in STOP}
     best = allv.sort_values("views_per_day", ascending=False).head(max(10, len(allv) // 4))
@@ -838,7 +869,8 @@ def plan_box(p: dict):
       <div class="prow"><span class="pl">{t('pl4')}</span><div><a href="{m['url']}" target="_blank">{html.escape(m['title'])}</a>
         <span class="pm">{t('pl_model', c=html.escape(str(m['channel'])), v=fmt(m['views']), x=x)}</span></div></div>
     </div>"""), unsafe_allow_html=True)
-    st.text_area(t("pl_tags"), p["tags"], height=80)
+    st.markdown(f'**{t("pl_tags")}**')
+    st.code(p["tags"], language=None, wrap_lines=True)
     st.caption(t("pl_cap"))
 
 
@@ -1107,11 +1139,14 @@ def app_page():
                 heads = [("en", t("sec_titles"))]
             for code, head in heads:
                 st.markdown(f'<div class="sec">{head}</div>', unsafe_allow_html=True)
-                for sgt in suggest_titles(allv, kw, angle, code, tn if code != "en" else ""):
+                _sg = suggest_titles(allv, kw, angle, code, tn if code != "en" else "")
+                for sgt in _sg:
                     why = (t("tl_proven", n=sgt["n"], x=f"{sgt['lift']:.1f}") if sgt["kind"] == "proven" else t("tl_untapped"))
                     color = TEAL if sgt["kind"] == "proven" else AMBER
                     st.markdown(f'<div class="ins"><div class="bar" style="background:{color}"></div><div><b>{html.escape(sgt["title"])}</b>'
                                 f'<span class="pm">{t("pat_" + sgt["pattern"])}  ·  {why}</span></div></div>', unsafe_allow_html=True)
+                if _sg:
+                    st.code("\n".join(x_["title"] for x_ in _sg), language=None, wrap_lines=True)
             st.caption(t("tl_note"))
 
             st.markdown(f'<div class="sec">{t("sec_pat")}</div>', unsafe_allow_html=True)
@@ -1280,6 +1315,16 @@ def app_page():
         else:
             top_n = st.slider(t("topn"), 10, max(len(allv), 11), min(40, len(allv)))
             top = allv.sort_values("views_per_day", ascending=False).head(top_n)
+            _fr0 = st.session_state.get("frames", {})
+            _tn0 = st.session_state.get(f"tn_{best_keyword(_fr0, small_ch)}", "") if (_fr0 and ui_code() != "en") else ""
+            cons = consensus_title(top, ui_code(), _tn0)
+            if cons:
+                st.markdown(f'<div class="sec">{t("cons_head")}</div>', unsafe_allow_html=True)
+                st.code(cons["title"], language=None, wrap_lines=True)
+                st.caption(t("cons_why", hits=cons["hits"], n=cons["n"], phrase=cons["phrase"],
+                             extras=", ".join(cons["extras"]) or "-", pat=t("pat_" + cons["pattern"]) if cons["pattern"] else "-",
+                             med=cons["med_len"], ln=cons["length"]))
+                st.caption(t("cons_note"))
             a, b = st.columns(2)
             with a:
                 st.markdown(f'<div class="sec">{t("sec_tags")}</div>', unsafe_allow_html=True)
@@ -1291,8 +1336,9 @@ def app_page():
                         x=alt.X("videos:Q", title=t("ax_tagvideos")), y=alt.Y("tag:N", sort="-x", title=None),
                         tooltip=["tag", "videos", "share_pct"]).properties(height=430), theme=None)
                     _fr = st.session_state.get("frames", {})
-                    st.text_area(t("tagstr") if ui_code() == "en" else t("tagstr_native"),
-                                 build_tags(allv, list(_fr), st.session_state.get("angle", ""), ui_code(), native_names(_fr), best_keyword(_fr, small_ch))[1], height=100)
+                    st.markdown(f"**{t('tagstr') if ui_code() == 'en' else t('tagstr_native')}**")
+                    st.code(build_tags(allv, list(_fr), st.session_state.get("angle", ""), ui_code(), native_names(_fr), best_keyword(_fr, small_ch))[1] if _fr
+                            else tag_string(tt), language=None, wrap_lines=True)
             with b:
                 st.markdown(f'<div class="sec">{t("sec_words")}</div>', unsafe_allow_html=True)
                 st.altair_chart(alt.Chart(title_words(top).head(20)).mark_bar(color=BLUE, cornerRadiusEnd=4).encode(
